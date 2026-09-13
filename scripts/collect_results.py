@@ -21,14 +21,16 @@ from datetime import datetime, timezone
 
 # Recorded rules to collect, in display order: section title -> rule name.
 # These are defined in deploy/prometheus/rules.yml.
-SECTIONS = OrderedDict([
-    ("p50 latency (seconds)", "bench:latency_p50"),
-    ("p95 latency (seconds)", "bench:latency_p95"),
-    ("p99 latency (seconds)", "bench:latency_p99"),
-    ("throughput (ops/sec)", "bench:throughput"),
-    ("Dapr overhead p50 (x the direct path)", "bench:dapr_overhead_ratio_p50"),
-    ("Dapr overhead p50 (added seconds)", "bench:dapr_overhead_seconds_p50"),
-])
+SECTIONS = OrderedDict(
+    [
+        ("p50 latency (seconds)", "bench:latency_p50"),
+        ("p95 latency (seconds)", "bench:latency_p95"),
+        ("p99 latency (seconds)", "bench:latency_p99"),
+        ("throughput (ops/sec)", "bench:throughput"),
+        ("Dapr overhead p50 (x the direct path)", "bench:dapr_overhead_ratio_p50"),
+        ("Dapr overhead p50 (added seconds)", "bench:dapr_overhead_seconds_p50"),
+    ]
+)
 
 # JSON keys for the same rules, kept machine-friendly.
 JSON_KEYS = {
@@ -40,7 +42,14 @@ JSON_KEYS = {
     "bench:dapr_overhead_seconds_p50": "overhead_seconds_p50",
 }
 
-CONFIG_FIELDS = ["payload_bytes", "keyspace", "concurrency", "rate", "warmup", "duration"]
+CONFIG_FIELDS = [
+    "payload_bytes",
+    "keyspace",
+    "concurrency",
+    "rate",
+    "warmup",
+    "duration",
+]
 
 
 def query(prom, expr):
@@ -50,12 +59,16 @@ def query(prom, expr):
         with urllib.request.urlopen(url, timeout=30) as resp:
             body = json.load(resp)
     except (urllib.error.URLError, TimeoutError) as err:
-        sys.exit(f"Cannot reach Prometheus at {prom}: {err}\n"
-                 f"Start the stack with 'make up' first.")
+        sys.exit(
+            f"Cannot reach Prometheus at {prom}: {err}\n"
+            f"Start the stack with 'make up' first."
+        )
     except json.JSONDecodeError:
         sys.exit(f"Prometheus at {prom} returned a non-JSON response.")
     if body.get("status") != "success":
-        sys.exit(f"Prometheus rejected the query {expr!r}: {body.get('error', 'unknown error')}")
+        sys.exit(
+            f"Prometheus rejected the query {expr!r}: {body.get('error', 'unknown error')}"
+        )
     return body["data"]["result"]
 
 
@@ -81,10 +94,14 @@ def collect_config(prom):
 def collect_connectors(prom):
     """Reads which connectors came up, as {"redis-dapr": True, ...}."""
     out = OrderedDict()
-    for s in sorted(query(prom, "bench_connector_up"),
-                    key=lambda s: (s["metric"].get("backend", ""), s["metric"].get("mode", ""))):
+    for s in sorted(
+        query(prom, "bench_connector_up"),
+        key=lambda s: (s["metric"].get("backend", ""), s["metric"].get("mode", "")),
+    ):
         m = s["metric"]
-        out[f'{m.get("backend", "?")}-{m.get("mode", "?")}'] = float(s["value"][1]) == 1.0
+        out[f"{m.get('backend', '?')}-{m.get('mode', '?')}"] = (
+            float(s["value"][1]) == 1.0
+        )
     return out
 
 
@@ -95,46 +112,64 @@ def collect_section(prom, rule):
     so those land under the key "value".
     """
     grouped = OrderedDict()
-    for s in sorted(query(prom, rule),
-                    key=lambda s: (s["metric"].get("backend", ""),
-                                   s["metric"].get("op", ""),
-                                   s["metric"].get("mode", ""))):
+    for s in sorted(
+        query(prom, rule),
+        key=lambda s: (
+            s["metric"].get("backend", ""),
+            s["metric"].get("op", ""),
+            s["metric"].get("mode", ""),
+        ),
+    ):
         m = s["metric"]
-        key = f'{m.get("backend", "?")} {m.get("op", "?")}'
-        grouped.setdefault(key, OrderedDict())[m.get("mode", "value")] = float(s["value"][1])
+        key = f"{m.get('backend', '?')} {m.get('op', '?')}"
+        grouped.setdefault(key, OrderedDict())[m.get("mode", "value")] = float(
+            s["value"][1]
+        )
     return grouped
 
 
 def collect(prom):
     """Gathers a whole run: when, what settings, and every recorded rule."""
-    return OrderedDict([
-        ("captured_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
-        ("prometheus", prom),
-        ("config", collect_config(prom)),
-        ("connectors_up", collect_connectors(prom)),
-        ("results", OrderedDict(
-            (JSON_KEYS[rule], collect_section(prom, rule)) for rule in SECTIONS.values()
-        )),
-    ])
+    return OrderedDict(
+        [
+            ("captured_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            ("prometheus", prom),
+            ("config", collect_config(prom)),
+            ("connectors_up", collect_connectors(prom)),
+            (
+                "results",
+                OrderedDict(
+                    (JSON_KEYS[rule], collect_section(prom, rule))
+                    for rule in SECTIONS.values()
+                ),
+            ),
+        ]
+    )
 
 
 def render_text(run):
     """The human-readable capture: run info first, then a block per rule."""
     lines = ["=== run info ==="]
-    lines.append(f'  captured        {run["captured_at"]}')
-    lines.append(f'  prometheus      {run["prometheus"]}')
+    lines.append(f"  captured        {run['captured_at']}")
+    lines.append(f"  prometheus      {run['prometheus']}")
     if run["config"]:
         for field in CONFIG_FIELDS:
-            lines.append(f'  {field:<15} {run["config"].get(field, "?")}')
+            lines.append(f"  {field:<15} {run['config'].get(field, '?')}")
     else:
         # Explicit, because a capture with no settings recorded is a capture you
         # cannot reproduce later.
-        lines.append("  config          (unavailable - bench_config_info not scraped yet)")
+        lines.append(
+            "  config          (unavailable - bench_config_info not scraped yet)"
+        )
     up = run["connectors_up"]
-    lines.append(f'  connectors up   {sum(up.values())}/{len(up)}' if up else "  connectors up   (none reported)")
+    lines.append(
+        f"  connectors up   {sum(up.values())}/{len(up)}"
+        if up
+        else "  connectors up   (none reported)"
+    )
     down = [name for name, ok in up.items() if not ok]
     if down:
-        lines.append(f'  DOWN            {", ".join(down)}')
+        lines.append(f"  DOWN            {', '.join(down)}")
     lines.append("")
 
     for title, rule in SECTIONS.items():
@@ -156,10 +191,15 @@ def render_text(run):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--prometheus", default="http://localhost:9091", help="Prometheus base URL")
-    ap.add_argument("--json", action="store_true", help="emit JSON instead of the text capture")
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--prometheus", default="http://localhost:9091", help="Prometheus base URL"
+    )
+    ap.add_argument(
+        "--json", action="store_true", help="emit JSON instead of the text capture"
+    )
     args = ap.parse_args()
 
     run = collect(args.prometheus.rstrip("/"))
