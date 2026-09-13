@@ -16,12 +16,14 @@ func NewWorkload(payloadBytes, keyspace int) Workload {
 	if keyspace < 1 {
 		keyspace = 1
 	}
+
 	payload := make([]byte, payloadBytes)
 	for i := range payload {
-		// Non-zero, non-uniform bytes so compression in any layer cannot
-		// flatter one backend over another.
+		// non-zero, non-uniform bytes so compression in any layer cannot
+		// flatter one backend over another
 		payload[i] = byte('a' + i%26)
 	}
+
 	return Workload{Payload: payload, Keyspace: keyspace}
 }
 

@@ -3,12 +3,13 @@ package connector
 
 import "context"
 
+// connector mode
 const (
 	ModeDirect = "direct" // app -> backend SDK -> backend
 	ModeDapr   = "dapr"   // app -> gRPC -> daprd sidecar -> backend
 )
 
-// Backend names.
+// backend names
 const (
 	BackendNATS     = "nats"
 	BackendPostgres = "postgres"
@@ -31,8 +32,7 @@ type Connector interface {
 	Mode() string
 	// Connect establishes the client and prepares any schema or streams.
 	Connect(ctx context.Context) error
-	// Ops returns the operations to benchmark. NATS only has "publish";
-	// the state stores have "write" and "read".
+	// Ops returns the operations to benchmark.
 	Ops() []Op
 	// Close releases the client.
 	Close() error

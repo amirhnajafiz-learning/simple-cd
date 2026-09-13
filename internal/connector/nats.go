@@ -10,18 +10,16 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+// nats configuration
 const (
 	natsStream       = "BENCH"
 	natsSubjects     = "bench.>"
-	NATSTopicDirect  = "bench.direct"
-	NATSTopicDapr    = "bench.dapr"
+	natsTopicDirect  = "bench.direct"
+	natsTopicDapr    = "bench.dapr"
 	natsSetupTimeout = 10 * time.Second
 )
 
-// NATSDirect publishes with JetStream and waits for the server ack. Waiting is
-// deliberate: Dapr's publish API is synchronous, so a fire-and-forget core NATS
-// publish would compare a buffered write against a full round trip and make the
-// Dapr overhead look far larger than it is.
+// NATSDirect publishes with JetStream and waits for the server ack.
 type NATSDirect struct {
 	url      string
 	workload Workload
@@ -34,19 +32,22 @@ func NewNATSDirect(url string, w Workload) *NATSDirect {
 }
 
 func (n *NATSDirect) Backend() string { return BackendNATS }
-func (n *NATSDirect) Mode() string    { return ModeDirect }
+
+func (n *NATSDirect) Mode() string { return ModeDirect }
 
 func (n *NATSDirect) Connect(ctx context.Context) error {
 	conn, err := nats.Connect(n.url, nats.MaxReconnects(-1))
 	if err != nil {
 		return fmt.Errorf("connect nats at %s: %w", n.url, err)
 	}
+
 	n.conn = conn
 
 	js, err := jetstream.New(conn)
 	if err != nil {
 		return fmt.Errorf("init jetstream: %w", err)
 	}
+
 	n.js = js
 
 	// created here rather than in a component file because both the direct and
@@ -54,11 +55,10 @@ func (n *NATSDirect) Connect(ctx context.Context) error {
 	// stream to already exist.
 	setupCtx, cancel := context.WithTimeout(ctx, natsSetupTimeout)
 	defer cancel()
+
 	_, err = js.CreateOrUpdateStream(setupCtx, jetstream.StreamConfig{
-		Name:     natsStream,
-		Subjects: []string{natsSubjects},
-		// bounded storage: the benchmark publishes continuously and we do not
-		// want disk growth to become the thing being measured.
+		Name:      natsStream,
+		Subjects:  []string{natsSubjects},
 		Retention: jetstream.LimitsPolicy,
 		Storage:   jetstream.FileStorage,
 		MaxMsgs:   100_000,
@@ -74,10 +74,13 @@ func (n *NATSDirect) Connect(ctx context.Context) error {
 
 func (n *NATSDirect) Ops() []Op {
 	return []Op{
-		{Name: "publish", Run: func(ctx context.Context, i int) error {
-			_, err := n.js.Publish(ctx, NATSTopicDirect, n.workload.Payload)
-			return err
-		}},
+		{
+			Name: "publish",
+			Run: func(ctx context.Context, i int) error {
+				_, err := n.js.Publish(ctx, natsTopicDirect, n.workload.Payload)
+				return err
+			},
+		},
 	}
 }
 
@@ -85,13 +88,12 @@ func (n *NATSDirect) Close() error {
 	if n.conn != nil {
 		n.conn.Close()
 	}
+
 	return nil
 }
 
 // NATSDapr publishes the same payload to the same stream through the Dapr
-// pub/sub API. Dapr additionally wraps the payload in a CloudEvent, which is
-// part of the overhead being measured and is left in on purpose: it is what a
-// real Dapr application pays.
+// pub/sub API.
 type NATSDapr struct {
 	daprBase
 	pubsub   string
@@ -102,13 +104,17 @@ func NewNATSDapr(grpcPort, pubsub string, w Workload) *NATSDapr {
 	return &NATSDapr{daprBase: daprBase{grpcPort: grpcPort}, pubsub: pubsub, workload: w}
 }
 
-func (n *NATSDapr) Backend() string                   { return BackendNATS }
+func (n *NATSDapr) Backend() string { return BackendNATS }
+
 func (n *NATSDapr) Connect(ctx context.Context) error { return n.connect(ctx) }
 
 func (n *NATSDapr) Ops() []Op {
 	return []Op{
-		{Name: "publish", Run: func(ctx context.Context, i int) error {
-			return n.client.PublishEvent(ctx, n.pubsub, NATSTopicDapr, n.workload.Payload)
-		}},
+		{
+			Name: "publish",
+			Run: func(ctx context.Context, i int) error {
+				return n.client.PublishEvent(ctx, n.pubsub, natsTopicDapr, n.workload.Payload)
+			},
+		},
 	}
 }
