@@ -49,7 +49,7 @@ func Serve(addr string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 
-	// Trivial liveness endpoint so compose can gate Prometheus on the app.
+	// trivial liveness endpoint so compose can gate Prometheus on the app
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

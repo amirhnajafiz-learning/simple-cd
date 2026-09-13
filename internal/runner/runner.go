@@ -24,16 +24,19 @@ type Options struct {
 
 // Run benchmarks every connector until ctx is cancelled, then returns.
 func Run(ctx context.Context, conns []connector.Connector, opt Options) {
-	// Warmup runs the full workload but throws the numbers away, so JIT-free Go
-	// still gets warm connection pools, primed caches and a settled sidecar.
+	// warmup runs the full workload but throws the numbers away
 	if opt.Warmup > 0 {
 		log.Printf("warmup: %s (measurements discarded)", opt.Warmup)
+
 		warmCtx, cancel := context.WithTimeout(ctx, opt.Warmup)
+
 		drive(warmCtx, conns, opt, false)
+
 		cancel()
 	}
 
 	log.Printf("measuring: %d connectors, concurrency=%d rate=%d/s", len(conns), opt.Concurrency, opt.Rate)
+
 	drive(ctx, conns, opt, true)
 }
 
@@ -41,36 +44,35 @@ func Run(ctx context.Context, conns []connector.Connector, opt Options) {
 // metric emission, which is what makes the warmup pass invisible in the results.
 func drive(ctx context.Context, conns []connector.Connector, opt Options, record bool) {
 	var wg sync.WaitGroup
+
 	for _, c := range conns {
 		wg.Add(1)
+
 		go func(c connector.Connector) {
 			defer wg.Done()
 			driveConnector(ctx, c, opt, record)
 		}(c)
 	}
+
 	wg.Wait()
 }
 
 func driveConnector(ctx context.Context, c connector.Connector, opt Options, record bool) {
 	ops := c.Ops()
 
-	// A token bucket paces the connector as a whole, so "rate" means the same
-	// thing whether a connector has one op or two. A plain time.Ticker is not
-	// enough here: it silently drops ticks whenever a worker is momentarily
-	// busy, which quietly caps the run well below the requested rate. The
-	// limiter accrues tokens instead, letting workers catch up after a stall.
+	// a token bucket paces the connector as a whole
 	var limiter *rate.Limiter
 	if opt.Rate > 0 {
 		limiter = rate.NewLimiter(rate.Limit(opt.Rate), opt.Concurrency)
 	}
 
-	// Iteration numbers are handed out atomically so workers within a connector
-	// never collide on the same key.
+	// iteration numbers
 	var counter atomic.Int64
 
 	var wg sync.WaitGroup
 	for w := 0; w < opt.Concurrency; w++ {
 		wg.Add(1)
+
 		go func() {
 			defer wg.Done()
 			for ctx.Err() == nil {
@@ -79,9 +81,11 @@ func driveConnector(ctx context.Context, c connector.Connector, opt Options, rec
 						return // context cancelled
 					}
 				}
+
 				i := int(counter.Add(1))
-				// Ops run in declaration order, so a "read" always follows the
-				// "write" of the same key and never misses.
+
+				// ops run in declaration order, so a "read" always follows the
+				// "write" of the same key and never misses
 				for _, op := range ops {
 					runOnce(ctx, c, op, i, opt.OpTimeout, record)
 				}
@@ -104,10 +108,11 @@ func runOnce(ctx context.Context, c connector.Connector, op connector.Op, i int,
 	if !record {
 		return
 	}
-	// Shutdown cancellations are not a property of the connector; dropping them
-	// keeps the final seconds of a run from polluting the error rate.
+
+	// shutdown cancellations are not a property of the connector
 	if err != nil && ctx.Err() != nil {
 		return
 	}
+
 	metrics.Observe(c.Backend(), c.Mode(), op.Name, elapsed, err)
 }
