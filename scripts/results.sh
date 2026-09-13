@@ -1,24 +1,16 @@
 #!/usr/bin/env bash
-
+# Prints a benchmark capture: the run's configuration, then all six results.
+# Pass --json for the same data as JSON. Any other flags go to collect_results.py.
 set -euo pipefail
 
 PROM="${PROM:-http://localhost:9091}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
+# Fail with a readable message rather than a parser traceback when the stack is
+# not up -- running `make results` before `make up` is an easy mistake.
 if ! curl -sf "$PROM/-/ready" >/dev/null; then
   echo "Prometheus is not reachable at $PROM. Start the stack with 'make up' first." >&2
   exit 1
 fi
 
-show() {
-  echo "=== $1 ==="
-  curl -sG "$PROM/api/v1/query" --data-urlencode "query=$2" | python3 "$HERE/format_results.py"
-  echo
-}
-
-show "p50 latency (seconds)"                     'bench:latency_p50'
-show "p95 latency (seconds)"                     'bench:latency_p95'
-show "p99 latency (seconds)"                     'bench:latency_p99'
-show "throughput (ops/sec)"                      'bench:throughput'
-show "Dapr overhead p50 (x the direct path)"     'bench:dapr_overhead_ratio_p50'
-show "Dapr overhead p50 (added seconds)"         'bench:dapr_overhead_seconds_p50'
+exec python3 "$HERE/collect_results.py" --prometheus "$PROM" "$@"

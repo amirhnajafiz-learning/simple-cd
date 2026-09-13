@@ -106,6 +106,7 @@ Raw series, all labelled `backend` / `mode` / `op`:
 | `bench_op_duration_seconds` | per-operation latency histogram                               |
 | `bench_ops_total`           | attempts, also labelled `status`                              |
 | `bench_connector_up`        | `1` per connector that started — a `0` means a missing result |
+| `bench_config_info`         | the run's settings as labels, so a capture is self-describing  |
 
 Because `mode` is the *only* differing label within a pair, the overhead is a plain
 division. The derived views live in [rules.yml](deploy/prometheus/rules.yml):
@@ -122,10 +123,29 @@ bench:dapr_overhead_seconds_p50                             # +  seconds vs dire
 Capture a run, then plot any number of captures against each other:
 
 ```sh
-make results > traces/20000.txt    # name each capture after whatever you varied
-make results > traces/200000.txt
-make plots FILES="traces/*.txt"
+make results      > traces/20000.txt    # text capture, run info at the top
+make results-json > traces/20000.json   # same run, machine-readable
+make plots FILES="traces/*.txt"         # .txt or .json, or a mix of both
 ```
+
+Every capture opens with the settings that produced it, read from the
+`bench_config_info` metric the app publishes — not from the compose file, which
+may have changed since:
+
+```
+=== run info ===
+  captured        2026-09-13T22:02:58+00:00
+  payload_bytes   10240
+  keyspace        1000
+  concurrency     1000
+  rate            200000
+  warmup          10s
+  duration        10m0s
+  connectors up   6/6
+```
+
+`make results-json` emits the same run as JSON — `config`, `connectors_up`, and a
+`results` block per recorded rule — for diffing runs or feeding another tool.
 
 This writes one SVG per metric into `plots/` — a panel per capture on a shared scale —
 and prints the direct-vs-Dapr ratios to stdout. Direct is always blue, Dapr always

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -38,6 +39,17 @@ func main() {
 
 	// the exporter comes up before any connecting happens, so Prometheus can
 	// scrape bench_connector_up even when a backend is unreachable
+	// Published before the run starts, so a scrape taken at any point carries the
+	// settings that produced it.
+	metrics.Config.WithLabelValues(
+		strconv.Itoa(cfg.PayloadBytes),
+		strconv.Itoa(cfg.Keyspace),
+		strconv.Itoa(cfg.Concurrency),
+		strconv.Itoa(cfg.Rate),
+		cfg.Warmup.String(),
+		cfg.Duration.String(),
+	).Set(1)
+
 	go func() {
 		log.Printf("metrics exporter listening on %s/metrics", cfg.MetricsAddr)
 

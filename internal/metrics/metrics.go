@@ -21,6 +21,12 @@ var (
 		Name: "bench_ops_total",
 		Help: "Number of benchmarked operations attempted.",
 	}, append(append([]string{}, labels...), "status"))
+	// Carries the workload settings as labels, so a scrape is self-describing:
+	// a captured result always says which config produced it.
+	Config = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "bench_config_info",
+		Help: "Workload configuration of this run (value is always 1).",
+	}, []string{"payload_bytes", "keyspace", "concurrency", "rate", "warmup", "duration"})
 	Up = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "bench_connector_up",
 		Help: "1 if the connector connected successfully, 0 otherwise.",
@@ -28,7 +34,7 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(Duration, Total, Up)
+	prometheus.MustRegister(Duration, Total, Config, Up)
 }
 
 // Observe records one completed operation. err == nil is recorded as a success;

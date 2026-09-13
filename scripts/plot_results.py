@@ -14,6 +14,7 @@ runnable with nothing but python3, exactly like format_results.py.
 """
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -49,8 +50,35 @@ SECTION_RE = re.compile(r"^===\s*(.+?)\s*===$")
 ROW_RE = re.compile(r"^\s+(\w+)\s+(\w+)\s+(direct|dapr|-)\s+([\d.eE+-]+)\s*$")
 
 
+# JSON keys (from collect_results.py --json) mapped onto the display names above.
+JSON_KEYS = {"latency_p50": "p50 latency", "latency_p95": "p95 latency",
+             "latency_p99": "p99 latency", "throughput": "throughput"}
+
+
+def parse_json(path):
+    """Reads a `results.sh --json` export into the same shape as parse()."""
+    with open(path) as fh:
+        run = json.load(fh)
+    data = {}
+    for key, rows in run.get("results", {}).items():
+        metric = JSON_KEYS.get(key)
+        if metric is None:  # the derived overhead rules; see METRICS
+            continue
+        for group, modes in rows.items():
+            for mode, value in modes.items():
+                if mode in ("direct", "dapr"):
+                    data.setdefault(metric, OrderedDict()).setdefault(group, {})[mode] = float(value)
+    return data
+
+
 def parse(path):
-    """Reads one results.sh capture into {metric: {"backend op": {mode: value}}}."""
+    """Reads one capture into {metric: {"backend op": {mode: value}}}.
+
+    Accepts either the text capture or the JSON export -- both come from the
+    same query set, so either one plots identically.
+    """
+    if path.endswith(".json"):
+        return parse_json(path)
     data = {}
     metric = None
     with open(path) as fh:

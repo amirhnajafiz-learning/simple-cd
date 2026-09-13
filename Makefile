@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f deploy/docker-compose.yml
 
-.PHONY: up down logs build test results plots clean
+.PHONY: up down logs build test results results-json plots clean
 
 ## up: build and start the whole stack (backends, bench + sidecar, Prometheus)
 up:
@@ -29,6 +29,10 @@ build:
 ## results: print the six results and the Dapr overhead ratio from Prometheus
 results:
 	@./scripts/results.sh
+
+## results-json: same capture as JSON, e.g. make results-json > traces/run.json
+results-json:
+	@./scripts/results.sh --json
 
 ## plots: chart sampled captures, e.g. make plots FILES="20000.txt 200000.txt"
 plots:
