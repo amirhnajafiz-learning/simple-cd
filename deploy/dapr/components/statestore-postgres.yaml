@@ -1,0 +1,14 @@
+# Dapr state store over the same PostgreSQL instance as the direct connector.
+# Dapr creates and owns its own table, so the two paths never share storage.
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore-postgres
+spec:
+  type: state.postgresql
+  version: v1
+  metadata:
+    - name: connectionString
+      value: "host=postgres user=bench password=bench port=5432 dbname=bench sslmode=disable"
+    - name: tableName
+      value: "dapr_state"

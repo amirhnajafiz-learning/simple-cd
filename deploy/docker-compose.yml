@@ -1,0 +1,101 @@
+name: dapr-overhead-bench
+
+services:
+  # Backends
+  nats:
+    image: nats:2.10-alpine
+    # -js enables JetStream (needed for acked publishes and Dapr's jetstream
+    # component); -m exposes the monitoring endpoint used by the healthcheck.
+    command: ["-js", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bench
+      POSTGRES_PASSWORD: bench
+      POSTGRES_DB: bench
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bench -d bench"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  # Benchmark app + dapr sidecar
+
+  bench:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      NATS_URL: "nats://nats:4222"
+      REDIS_ADDR: "redis:6379"
+      POSTGRES_DSN: "postgres://bench:bench@postgres:5432/bench?sslmode=disable"
+      DAPR_GRPC_PORT: "50001"
+      PAYLOAD_BYTES: "256"
+      KEYSPACE: "1000"
+      CONCURRENCY: "8"
+      RATE: "200"
+      WARMUP: "10s"
+      DURATION: "0" # 0 runs until stopped; set e.g. 5m for a fixed experiment
+    ports:
+      - "9100:9100" # bench exporter
+      - "9090:9090" # dapr sidecar metrics (same namespace, see below)
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  dapr:
+    image: daprio/daprd:1.14.4
+    command:
+      - "/daprd"
+      - "--app-id=bench"
+      - "--dapr-grpc-port=50001"
+      - "--resources-path=/components"
+      - "--config=/config/config.yaml"
+      - "--metrics-port=9090"
+      - "--log-level=info"
+    volumes:
+      - ./dapr/components:/components:ro
+      - ./dapr/config.yaml:/config/config.yaml:ro
+    network_mode: "service:bench"
+    depends_on:
+      - bench
+
+  # Observability
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=6h"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on:
+      - bench

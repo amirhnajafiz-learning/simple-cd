@@ -1,0 +1,12 @@
+# Sidecar configuration. Tracing is switched off on purpose: a sampled trace
+# exporter would add its own latency to every call and inflate the very overhead
+# this project sets out to measure.
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: bench-config
+spec:
+  tracing:
+    samplingRate: "0"
+  metric:
+    enabled: true

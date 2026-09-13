@@ -1,0 +1,17 @@
+# Dapr pub/sub component backed by the same NATS server the direct connector
+# uses. The BENCH stream (subjects bench.>) is created by the app at startup;
+# this component only publishes into it.
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub-nats
+spec:
+  type: pubsub.jetstream
+  version: v1
+  metadata:
+    - name: natsURL
+      value: "nats://nats:4222"
+    # Identifies this client in NATS monitoring, handy when eyeballing which
+    # side of the comparison a connection belongs to.
+    - name: name
+      value: "dapr-bench-publisher"

@@ -1,0 +1,19 @@
+# Scrapes the benchmark exporter and the Dapr sidecar's own metrics.
+global:
+  scrape_interval: 5s # short, since a run may only last a couple of minutes
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+scrape_configs:
+  # The six connector results.
+  - job_name: bench
+    static_configs:
+      - targets: ["bench:9100"]
+
+  # The sidecar's view of the same traffic, useful for attributing overhead to
+  # daprd itself (it shares the bench container's network namespace).
+  - job_name: dapr-sidecar
+    static_configs:
+      - targets: ["bench:9090"]
