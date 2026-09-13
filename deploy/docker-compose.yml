@@ -51,12 +51,12 @@ services:
       REDIS_ADDR: "redis:6379"
       POSTGRES_DSN: "postgres://bench:bench@postgres:5432/bench?sslmode=disable"
       DAPR_GRPC_PORT: "50001"
-      PAYLOAD_BYTES: "256"
+      PAYLOAD_BYTES: "10240"
       KEYSPACE: "1000"
-      CONCURRENCY: "8"
-      RATE: "200"
+      CONCURRENCY: "1000"
+      RATE: "200000"
       WARMUP: "10s"
-      DURATION: "0" # 0 runs until stopped; set e.g. 5m for a fixed experiment
+      DURATION: "10m" # 0 runs until stopped; set e.g. 5m for a fixed experiment
     ports:
       - "9100:9100" # bench exporter
       - "9090:9090" # dapr sidecar metrics (same namespace, see below)

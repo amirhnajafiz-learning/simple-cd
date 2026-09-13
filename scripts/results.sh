@@ -17,6 +17,7 @@ show() {
 }
 
 show "p50 latency (seconds)"                     'bench:latency_p50'
+show "p95 latency (seconds)"                     'bench:latency_p95'
 show "p99 latency (seconds)"                     'bench:latency_p99'
 show "throughput (ops/sec)"                      'bench:throughput'
 show "Dapr overhead p50 (x the direct path)"     'bench:dapr_overhead_ratio_p50'
