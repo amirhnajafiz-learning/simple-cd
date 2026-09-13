@@ -1,27 +1,26 @@
-<h1 align="center">Dapr Overhead Benchmark</h1>
+# Dapr I/O Benchmark
 
-<p align="center">
-  <em>What does a Dapr sidecar actually cost on the data plane?</em>
-</p>
+[Dapr](https://dapr.io) is an open-source, portable runtime designed to help developers build resilient,
+secure, microservices-based distributed applications and AI agents.
+However, it comes with an I/O overhead caused by the additional layer introduced by Dapr.
+In this work, we run the same workload twice against each of **NATS**, **PostgreSQL**, and **Redis**:
+once through the native Go SDK and once through Dapr. Both results are exported as Prometheus metrics.
+The overhead becomes a measurable ratio, not a guess.
+These results should be taken into consideration when deciding whether to switch to Dapr.
 
-<p align="center">
-  Six connectors &middot; three backends &middot; one identical workload &middot; Prometheus metrics
-</p>
-
-The same workload runs twice against each of **NATS**, **PostgreSQL** and **Redis**,
-once through a native Go SDK, once through Dapr, and both results are exported as
-Prometheus metrics. The overhead becomes a division, not a guess.
+> As Gamora asked Thanos: **“What did it cost?”**
+> And Thanos replied: **“Everything.”**
 
 ## The six connectors
 
-| Connector | Path | Operations |
-| --- | --- | --- |
-| `nats-direct` | app → nats.go (JetStream, acked) | `publish` |
-| `nats-dapr` | app → gRPC → daprd → NATS JetStream | `publish` |
-| `postgres-direct` | app → pgx → PostgreSQL | `write`, `read` |
-| `postgres-dapr` | app → gRPC → daprd → PostgreSQL | `write`, `read` |
-| `redis-direct` | app → go-redis → Redis | `write`, `read` |
-| `redis-dapr` | app → gRPC → daprd → Redis | `write`, `read` |
+| Connector         | Path                                | Operations      |
+| ----------------- | ----------------------------------- | --------------- |
+| `nats-direct`     | app → nats.go (JetStream, acked)    | `publish`       |
+| `nats-dapr`       | app → gRPC → daprd → NATS JetStream | `publish`       |
+| `postgres-direct` | app → pgx → PostgreSQL              | `write`, `read` |
+| `postgres-dapr`   | app → gRPC → daprd → PostgreSQL     | `write`, `read` |
+| `redis-direct`    | app → go-redis → Redis              | `write`, `read` |
+| `redis-dapr`      | app → gRPC → daprd → Redis          | `write`, `read` |
 
 Each pair hits the **same server instance** with the **same payload** at the **same
 rate**, and all six run **concurrently**, so they share one machine's CPU and IO
@@ -29,16 +28,16 @@ weather, and the only difference within a pair is the sidecar hop.
 
 ```mermaid
 flowchart LR
-    App["bench app"]
-    Dapr["daprd sidecar"]
+    App/Agent["bench app/agent"]
     NATS[("NATS")]
     PG[("PostgreSQL")]
     Redis[("Redis")]
+    Dapr["daprd sidecar"]
 
-    App -->|native SDK| NATS
-    App -->|native SDK| PG
-    App -->|native SDK| Redis
-    App -->|gRPC| Dapr
+    App/Agent -->|native SDK| NATS
+    App/Agent -->|native SDK| PG
+    App/Agent -->|native SDK| Redis
+    App/Agent -->|gRPC| Dapr
     Dapr --> NATS
     Dapr --> PG
     Dapr --> Redis
@@ -61,10 +60,10 @@ Then: bench metrics on <http://localhost:9100/metrics>, the sidecar's own metric
 **Dapr's cost depends entirely on which regime you are in.** Under light load it is a
 fixed sub-millisecond tax. Under saturation it becomes a ceiling on throughput.
 
-| Regime | Latency cost | Throughput cost |
-| --- | --- | --- |
-| **Light** — 200 ops/sec, 256 B, concurrency 8 | `+0.2–0.7 ms` (1.8–3.1×) | not saturated |
-| **Saturated** — 10 KiB, concurrency 1000 | 1.9–4.5× at p50 | **2.1–4.1× less work done** |
+| Regime                                        | Latency cost             | Throughput cost             |
+| --------------------------------------------- | ------------------------ | --------------------------- |
+| **Light** — 200 ops/sec, 256 B, concurrency 8 | `+0.2–0.7 ms` (1.8–3.1×) | not saturated               |
+| **Saturated** — 10 KiB, concurrency 1000      | 1.9–4.5× at p50          | **2.1–4.1× less work done** |
 
 ### Throughput is the real story
 
@@ -73,13 +72,13 @@ fixed sub-millisecond tax. Under saturation it becomes a ceiling on throughput.
 At saturation the sidecar caps how much work gets through, regardless of how hard the
 app pushes (`RATE=200000`, 10 KiB payloads):
 
-| Operation | Direct | Through Dapr | Penalty |
-| --- | ---: | ---: | ---: |
-| `nats publish` | 42,452 ops/s | 10,280 ops/s | **4.1× less** |
-| `postgres read` | 9,308 ops/s | 2,404 ops/s | **3.9× less** |
-| `postgres write` | 9,307 ops/s | 2,404 ops/s | **3.9× less** |
-| `redis read` | 16,592 ops/s | 7,957 ops/s | 2.1× less |
-| `redis write` | 16,592 ops/s | 7,956 ops/s | 2.1× less |
+| Operation        |       Direct | Through Dapr |       Penalty |
+| ---------------- | -----------: | -----------: | ------------: |
+| `nats publish`   | 42,452 ops/s | 10,280 ops/s | **4.1× less** |
+| `postgres read`  |  9,308 ops/s |  2,404 ops/s | **3.9× less** |
+| `postgres write` |  9,307 ops/s |  2,404 ops/s | **3.9× less** |
+| `redis read`     | 16,592 ops/s |  7,957 ops/s |     2.1× less |
+| `redis write`    | 16,592 ops/s |  7,956 ops/s |     2.1× less |
 
 ### Latency
 
@@ -102,11 +101,11 @@ operation, which for most applications is noise against a network round trip.
 
 Raw series, all labelled `backend` / `mode` / `op`:
 
-| Metric | Meaning |
-| --- | --- |
-| `bench_op_duration_seconds` | per-operation latency histogram |
-| `bench_ops_total` | attempts, also labelled `status` |
-| `bench_connector_up` | `1` per connector that started — a `0` means a missing result |
+| Metric                      | Meaning                                                       |
+| --------------------------- | ------------------------------------------------------------- |
+| `bench_op_duration_seconds` | per-operation latency histogram                               |
+| `bench_ops_total`           | attempts, also labelled `status`                              |
+| `bench_connector_up`        | `1` per connector that started — a `0` means a missing result |
 
 Because `mode` is the *only* differing label within a pair, the overhead is a plain
 division. The derived views live in [rules.yml](deploy/prometheus/rules.yml):
@@ -140,14 +139,14 @@ skipped rather than drawing an empty panel.
 All knobs are environment variables on the `bench` service in
 [docker-compose.yml](deploy/docker-compose.yml):
 
-| Variable | Meaning |
-| --- | --- |
-| `PAYLOAD_BYTES` | value size per operation |
-| `KEYSPACE` | distinct keys cycled through |
-| `CONCURRENCY` | in-flight operations per connector |
-| `RATE` | operations/sec per connector (`0` = as fast as possible) |
-| `WARMUP` | discarded settling period |
-| `DURATION` | run length (`0` = until stopped) |
+| Variable        | Meaning                                                  |
+| --------------- | -------------------------------------------------------- |
+| `PAYLOAD_BYTES` | value size per operation                                 |
+| `KEYSPACE`      | distinct keys cycled through                             |
+| `CONCURRENCY`   | in-flight operations per connector                       |
+| `RATE`          | operations/sec per connector (`0` = as fast as possible) |
+| `WARMUP`        | discarded settling period                                |
+| `DURATION`      | run length (`0` = until stopped)                         |
 
 Payload size is the interesting axis: Dapr's cost is largely per-call, so the relative
 overhead shrinks as payloads grow. Concurrency is the other one — it decides which of
@@ -176,11 +175,11 @@ Dapr's components do not store data the way a direct client would, and none of i
 switchable. It is a real cost of adopting Dapr, so it stays in the measurement — but it
 means the overhead is not purely "one gRPC hop":
 
-| | Direct | Through Dapr |
-| --- | --- | --- |
-| **Redis** | `SET` of a plain string | Lua `EVAL` → `HSET` of `{data, version}`, key prefixed `bench\|\|` |
-| **Postgres** | `bytea` | base64 inside `jsonb` (~1.4× the bytes) plus `isbinary` / `insertdate` / `updatedate` / `expiredate` |
-| **NATS** | raw payload | CloudEvent envelope plus `Nats-MsgId` dedup |
+|              | Direct                  | Through Dapr                                                                                         |
+| ------------ | ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Redis**    | `SET` of a plain string | Lua `EVAL` → `HSET` of `{data, version}`, key prefixed `bench\|\|`                                   |
+| **Postgres** | `bytea`                 | base64 inside `jsonb` (~1.4× the bytes) plus `isbinary` / `insertdate` / `updatedate` / `expiredate` |
+| **NATS**     | raw payload             | CloudEvent envelope plus `Nats-MsgId` dedup                                                          |
 
 So Redis in particular is Dapr doing strictly *more work* — a scripted
 read-modify-write of a hash — than the plain `SET` it is compared against.
